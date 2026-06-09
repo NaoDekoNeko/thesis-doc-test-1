@@ -1,0 +1,8 @@
+{
+  "label": "📊 Observability",
+  "position": 5,
+  "link": {
+    "type": "generated-index",
+    "description": "Logging estructurado, métricas y monitoreo de servicios."
+  }
+}

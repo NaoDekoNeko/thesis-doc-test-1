@@ -1,0 +1,8 @@
+{
+  "label": "🏗️ IaC",
+  "position": 4,
+  "link": {
+    "type": "generated-index",
+    "description": "Infraestructura como código con Terraform y GCP."
+  }
+}

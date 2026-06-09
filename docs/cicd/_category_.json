@@ -1,0 +1,8 @@
+{
+  "label": "⚙️ CI/CD",
+  "position": 2,
+  "link": {
+    "type": "generated-index",
+    "description": "Pipelines de integración y entrega continua con GitHub Actions."
+  }
+}
