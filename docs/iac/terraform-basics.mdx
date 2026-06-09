@@ -1,0 +1,60 @@
+---
+title: Introducción a Terraform
+category: iac
+---
+
+# Introducción a Terraform
+
+Terraform es una herramienta de **Infraestructura como Código (IaC)** que permite definir, provisionar y versionar recursos de nube usando archivos HCL declarativos.
+
+## Flujo de trabajo
+
+```
+terraform init      → descarga providers y configura backend
+terraform plan      → muestra qué va a cambiar (sin aplicar)
+terraform apply     → aplica los cambios en GCP
+terraform destroy   → elimina todos los recursos del estado
+```
+
+## Estructura de un proyecto Terraform
+
+```
+thesis-rag-infra/
+├── versions.tf        # provider versions y backend
+├── variables.tf       # inputs del módulo raíz
+├── outputs.tf         # valores expuestos tras el apply
+├── main.tf            # llamadas a módulos
+└── modules/
+    ├── iam/           # service accounts y WIF bindings
+    ├── cloud-run/     # servicio Cloud Run + Secret Manager
+    ├── cloud-sql/     # instancia PostgreSQL + pgvector
+    └── gcs-site/      # buckets para minisites estáticos
+```
+
+## Estado remoto
+
+El estado de Terraform se guarda en un bucket GCS (`thesis-rag-poc-tfstate`). Esto permite que el pipeline de GitHub Actions y el trabajo local compartan el mismo estado sin conflictos.
+
+```hcl
+terraform {
+  backend "gcs" {
+    prefix = "thesis-rag/state"
+    # bucket se pasa con -backend-config en CI
+  }
+}
+```
+
+## Módulos reutilizables
+
+Cada recurso lógico es un módulo independiente. El módulo raíz los compone:
+
+```hcl
+module "cloud_run" {
+  source             = "./modules/cloud-run"
+  project_id         = var.project_id
+  image              = var.microservice_image
+  db_connection_name = module.cloud_sql.connection_name
+}
+```
+
+Esto facilita reusar el módulo `gcs-site` para múltiples minisites con un `for_each`.

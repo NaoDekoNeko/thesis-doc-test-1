@@ -1,0 +1,49 @@
+---
+title: Monitoreo y alertas
+category: observability
+---
+
+# Monitoreo y alertas
+
+## Métricas de Cloud Run
+
+Cloud Run expone métricas automáticas en Cloud Monitoring sin configuración adicional:
+
+| Métrica | Descripción |
+|---|---|
+| `request_count` | Número de requests por estado HTTP |
+| `request_latencies` | Latencia por percentil (p50, p95, p99) |
+| `container/instance_count` | Instancias activas |
+| `container/cpu/utilizations` | Uso de CPU |
+| `container/memory/utilizations` | Uso de memoria |
+
+## Métricas relevantes para el RAG
+
+Para el microservicio de búsqueda, los indicadores más importantes son:
+
+- **Latencia p95 del endpoint `/chat/ask`**: debe estar bajo 10s para una buena experiencia de usuario.
+- **Error rate**: porcentaje de respuestas 5xx. Un spike indica problemas con Gemini API o Cloud SQL.
+- **Cold start frequency**: número de instancias que arrancan desde cero. Se minimiza con `min_instances = 1` en producción.
+
+## Alertas recomendadas
+
+```yaml
+# Ejemplo conceptual de política de alerta
+alert:
+  condition: latency_p95 > 10s durante 5 minutos
+  notification: email / PagerDuty
+
+alert:
+  condition: error_rate > 5% durante 2 minutos
+  notification: email
+```
+
+## Dashboard básico
+
+Para la PoC, el monitoreo se hace directamente en la consola de Cloud Run:
+
+1. **Cloud Run** → `thesis-rag-microservice` → **Metrics**
+2. Filtrar por `request_latencies` y `request_count`
+3. Revisar los logs de errores en Cloud Logging correlacionados por `revision_name`
+
+Para una arquitectura de producción, se documentan patrones avanzados en el portal de [Software Architecture Docs](https://storage.googleapis.com/thesis-rag-poc-thesis-doc-test-2/index.html), específicamente en la sección de patrones de resiliencia.

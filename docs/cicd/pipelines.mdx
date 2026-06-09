@@ -1,0 +1,66 @@
+---
+title: Diseño de Pipelines
+category: cicd
+---
+
+# Diseño de Pipelines
+
+## Pipeline de un minisite Docusaurus
+
+Cada repo de documentación sigue este flujo al hacer push a `master`:
+
+```
+push a master
+    │
+    ▼
+[Job: deploy]
+    ├── checkout
+    ├── pnpm install
+    ├── pnpm build          → genera ./build/
+    ├── auth GCP (OIDC)
+    └── gsutil rsync        → sube build/ a GCS
+         │
+         ▼ (needs: deploy)
+[Job: index]  ← solo si cambiaron docs/
+    ├── checkout
+    └── indexer action      → Docker container
+         ├── procesa Markdown
+         ├── genera embeddings (Gemini)
+         └── inserta en PostgreSQL+pgvector
+```
+
+## Pipeline del microservicio RAG
+
+El microservicio tiene su propio pipeline en `thesis-rag-microservice`:
+
+```
+push a master
+    │
+    ▼
+[Job: build-push-deploy]
+    ├── checkout
+    ├── auth GCP (OIDC)
+    ├── docker build        → imagen NestJS multi-stage
+    ├── docker push         → Artifact Registry
+    └── deploy Cloud Run    → actualiza el servicio
+```
+
+## Separación de responsabilidades
+
+Cada repo es dueño de su propio pipeline. No existe un pipeline central que orqueste todos los repos. Esto es intencional:
+
+- Los minisites pueden deployarse de forma independiente.
+- El microservicio puede actualizarse sin afectar los sitios.
+- La infraestructura (Terraform) tiene su propio pipeline de plan/apply.
+
+Esta separación refleja el principio de **desacoplamiento** documentado en el portal de [Software Architecture Docs](https://storage.googleapis.com/thesis-rag-poc-thesis-doc-test-2/index.html).
+
+## Gestión de secretos en pipelines
+
+| Secreto | Uso | Alcance |
+|---|---|---|
+| `WIF_PROVIDER` | Autenticación OIDC con GCP | Todos los repos |
+| `WIF_SERVICE_ACCOUNT` | SA específica por repo | Por repo |
+| `GCS_BUCKET` | Bucket destino del deploy | Repos de docs |
+| `GEMINI_API_KEY` | Indexación RAG | Repos de docs |
+| `DB_*` | Conexión a PostgreSQL | Repos de docs |

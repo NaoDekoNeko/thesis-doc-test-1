@@ -1,0 +1,71 @@
+---
+title: GitHub Actions
+category: cicd
+---
+
+# GitHub Actions
+
+GitHub Actions es el motor de CI/CD utilizado en todos los repositorios del proyecto. Cada repo contiene sus propios workflows en `.github/workflows/`.
+
+## Conceptos clave
+
+| Concepto | Descripción |
+|---|---|
+| **Workflow** | Archivo YAML que define un proceso automatizado |
+| **Job** | Conjunto de pasos que se ejecutan en un runner |
+| **Step** | Unidad mínima: un comando shell o una `action` |
+| **Runner** | Máquina virtual donde corre el job (`ubuntu-latest`) |
+| **Secret** | Variable cifrada accesible solo durante la ejecución |
+
+## Autenticación con GCP sin credenciales almacenadas
+
+Todos los repos usan **Workload Identity Federation (OIDC)** para autenticarse en GCP. Esto elimina la necesidad de almacenar Service Account keys como secretos.
+
+```yaml
+- uses: google-github-actions/auth@v2
+  with:
+    workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+    service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+```
+
+El token OIDC lo emite GitHub en tiempo de ejecución. GCP verifica que el claim `repository` del token coincida con el binding configurado en IAM antes de conceder acceso.
+
+## Estructura de un workflow de CD típico
+
+```yaml
+on:
+  push:
+    branches: [master]
+    paths: ['docs/**', 'src/**']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pnpm build
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+      - run: gsutil -m rsync -R -d ./build gs://${{ secrets.GCS_BUCKET }}
+```
+
+## Path filters
+
+Para no disparar el pipeline en cambios de documentación cuando no hay cambios en código (o viceversa), se usan `paths`:
+
+```yaml
+on:
+  push:
+    paths:
+      - 'docs/**'   # solo si cambia contenido
+      - 'src/**'    # o código del sitio
+```
+
+## Buenas prácticas
+
+- Usar `actions/checkout@v4` siempre con versión fija para reproducibilidad.
+- No usar `secrets.GITHUB_TOKEN` para operaciones en GCP; usar OIDC.
+- Separar jobs de build y deploy para poder re-ejecutar solo el deploy si falla.
+- Usar `needs:` para definir dependencias entre jobs explícitamente.

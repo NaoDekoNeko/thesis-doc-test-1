@@ -1,0 +1,60 @@
+---
+title: Recursos GCP
+category: iac
+---
+
+# Recursos GCP provisionados con Terraform
+
+## Mapa de recursos
+
+```
+GCP Project: thesis-rag-poc
+│
+├── Cloud Run
+│   └── thesis-rag-microservice    (NestJS RAG API)
+│
+├── Cloud SQL
+│   └── thesis-rag-pg              (PostgreSQL 15 + pgvector)
+│       ├── ragdb
+│       └── raguser
+│
+├── GCS Buckets
+│   ├── thesis-rag-poc-thesis-doc-test-1  (minisite 1, público)
+│   └── thesis-rag-poc-thesis-doc-test-2  (minisite 2, público)
+│
+├── Artifact Registry
+│   └── thesis-rag/                (imágenes Docker)
+│       └── microservice:latest
+│
+├── Secret Manager
+│   ├── thesis-rag-db-password
+│   └── thesis-rag-gemini-api-key
+│
+└── IAM
+    ├── terraform-deployer@...     (SA del pipeline de infra)
+    ├── thesis-rag-microservice@.. (SA runtime de Cloud Run)
+    ├── ci-microservice@...        (SA CI/CD del microservicio)
+    ├── ci-thesis-doc-test-1@...   (SA CI/CD del minisite 1)
+    └── ci-thesis-doc-test-2@...   (SA CI/CD del minisite 2)
+```
+
+## Principio de mínimo privilegio
+
+Cada SA tiene solo los roles necesarios:
+
+| SA | Roles |
+|---|---|
+| `terraform-deployer` | Editor, Security Admin, Storage Admin |
+| `thesis-rag-microservice` | Cloud SQL Client, Secret Manager Accessor |
+| `ci-microservice` | Artifact Registry Writer, Cloud Run Developer |
+| `ci-thesis-doc-test-*` | Storage Object Admin (bucket propio) |
+
+## Workload Identity Federation
+
+Ningún pipeline almacena credenciales GCP. La autenticación usa OIDC:
+
+1. GitHub emite un token JWT firmado con claims del repo
+2. GCP valida el token contra el WIF pool configurado
+3. GCP intercambia el JWT por credenciales temporales de la SA correspondiente
+
+Esto elimina el riesgo de filtración de Service Account keys.

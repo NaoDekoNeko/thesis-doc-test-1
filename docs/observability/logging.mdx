@@ -1,0 +1,52 @@
+---
+title: Logging estructurado
+category: observability
+---
+
+# Logging estructurado
+
+El logging estructurado emite logs como objetos JSON en lugar de texto plano, lo que permite filtrarlos y analizarlos programáticamente en Cloud Logging.
+
+## Formato en NestJS
+
+El microservicio RAG usa el `Logger` de NestJS, que en producción emite JSON compatible con Cloud Logging:
+
+```typescript
+import { Logger } from '@nestjs/common';
+
+@Injectable()
+export class SearchService {
+  private readonly logger = new Logger(SearchService.name);
+
+  async hybridSearch(query: string) {
+    this.logger.log(`Búsqueda iniciada: "${query}"`);
+    // ...
+    this.logger.error('Embedding generation failed', err.stack);
+  }
+}
+```
+
+## Niveles de log
+
+| Nivel | Uso |
+|---|---|
+| `log` | Operaciones normales del sistema |
+| `warn` | Situaciones inesperadas pero recuperables |
+| `error` | Errores que requieren atención |
+| `debug` | Información de diagnóstico (desactivado en producción) |
+
+## Consultas en Cloud Logging
+
+```
+# Buscar errores del microservicio
+resource.type="cloud_run_revision"
+resource.labels.service_name="thesis-rag-microservice"
+severity=ERROR
+
+# Ver tiempos de respuesta del endpoint /chat/ask
+jsonPayload.message=~"totalMs"
+```
+
+## Relación con métricas
+
+Los logs son la fuente primaria de observabilidad para la PoC. En una arquitectura de producción se complementarían con métricas de Cloud Monitoring y trazas distribuidas con Cloud Trace.
