@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   build-validation:
@@ -27,6 +26,26 @@ jobs:
   semantic-regression:
     name: Regresión semántica (ground truth IR)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ragdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      DB_NAME: ragdb
+      DB_USER: postgres
+      DB_PASSWORD: postgres
     steps:
       - name: Checkout PR (minisitio propio)
         uses: actions/checkout@v4
@@ -45,39 +64,33 @@ jobs:
           repository: NaoDekoNeko/thesis-rag-microservice
           path: microservice
 
-      - name: Definir tabla réplica del PR
-        id: vars
-        run: echo "table=doc_embeddings_rag_pr_${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+      - name: Habilitar extensión pgvector
+        run: |
+          sudo apt-get install -y postgresql-client > /dev/null 2>&1 || true
+          PGPASSWORD=postgres psql -h localhost -U postgres -d ragdb \
+            -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
-      - name: Indexar minisitio propio (PR) en tabla réplica
-        uses: ./microservice/indexer
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          docs-path: ${{ github.workspace }}/self/docs
-          doc-folder: thesis-doc-test-1
-          vector-table-name: ${{ steps.vars.outputs.table }}
-          clear: 'true'
-          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
-          wif-provider: ${{ secrets.WIF_PROVIDER }}
-          wif-service-account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
-          db-instance: ${{ secrets.DB_INSTANCE }}
-          db-name: ${{ secrets.DB_NAME }}
-          db-user: ${{ secrets.DB_USER }}
-          db-password: ${{ secrets.DB_PASSWORD }}
+          python-version: '3.12'
+      - run: pip install -r microservice/indexer/requirements.txt
 
-      - name: Indexar minisitio hermano (estado actual) en la misma tabla réplica
-        uses: ./microservice/indexer
-        with:
-          docs-path: ${{ github.workspace }}/sibling/docs
-          doc-folder: thesis-doc-test-2
-          vector-table-name: ${{ steps.vars.outputs.table }}
-          clear: 'true'
-          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
-          wif-provider: ${{ secrets.WIF_PROVIDER }}
-          wif-service-account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
-          db-instance: ${{ secrets.DB_INSTANCE }}
-          db-name: ${{ secrets.DB_NAME }}
-          db-user: ${{ secrets.DB_USER }}
-          db-password: ${{ secrets.DB_PASSWORD }}
+      - name: Indexar minisitio propio (PR)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DOC_FOLDER: thesis-doc-test-1
+          DOCS_PATH: ${{ github.workspace }}/self/docs
+          CLEAR: 'true'
+        run: python microservice/indexer/document_processor.py
+
+      - name: Indexar minisitio hermano (estado actual)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DOC_FOLDER: thesis-doc-test-2
+          DOCS_PATH: ${{ github.workspace }}/sibling/docs
+          CLEAR: 'true'
+        run: python microservice/indexer/document_processor.py
 
       - uses: pnpm/action-setup@v4
         with:
@@ -90,19 +103,12 @@ jobs:
         working-directory: microservice
         run: pnpm install --frozen-lockfile && pnpm build
 
-      - name: Levantar microservicio contra la tabla réplica
+      - name: Levantar microservicio contra Postgres efímero
         working-directory: microservice
         env:
           PORT: '3000'
-          DB_HOST: 127.0.0.1
-          DB_PORT: '5432'
-          DB_NAME: ${{ secrets.DB_NAME }}
-          DB_USER: ${{ secrets.DB_USER }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          VECTOR_TABLE_NAME: ${{ steps.vars.outputs.table }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          # El Cloud SQL Proxy quedó corriendo en background desde los pasos de indexación.
           nohup node dist/main.js > microservice.log 2>&1 &
           for i in $(seq 1 30); do
             if curl -sf http://localhost:3000/chat/health > /dev/null; then
@@ -119,12 +125,3 @@ jobs:
         run: |
           npx ts-node --transpile-only eval/run-eval.ts
           npx ts-node --transpile-only eval/compare-baseline.ts
-
-      - name: Limpieza — borrar tabla réplica
-        if: always()
-        env:
-          PGPASSWORD: ${{ secrets.DB_PASSWORD }}
-        run: |
-          sudo apt-get install -y postgresql-client > /dev/null 2>&1 || true
-          psql -h 127.0.0.1 -U "${{ secrets.DB_USER }}" -d "${{ secrets.DB_NAME }}" \
-            -c "DROP TABLE IF EXISTS ${{ steps.vars.outputs.table }};" || true
