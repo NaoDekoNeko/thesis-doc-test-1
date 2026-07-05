@@ -1,0 +1,130 @@
+name: Semantic CI
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build-validation:
+    name: Validar build de Docusaurus
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+  semantic-regression:
+    name: Regresión semántica (ground truth IR)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR (minisitio propio)
+        uses: actions/checkout@v4
+        with:
+          path: self
+
+      - name: Checkout minisitio hermano (thesis-doc-test-2)
+        uses: actions/checkout@v4
+        with:
+          repository: NaoDekoNeko/thesis-doc-test-2
+          path: sibling
+
+      - name: Checkout microservicio (indexer, eval, ground truth)
+        uses: actions/checkout@v4
+        with:
+          repository: NaoDekoNeko/thesis-rag-microservice
+          path: microservice
+
+      - name: Definir tabla réplica del PR
+        id: vars
+        run: echo "table=doc_embeddings_rag_pr_${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Indexar minisitio propio (PR) en tabla réplica
+        uses: ./microservice/indexer
+        with:
+          docs-path: ${{ github.workspace }}/self/docs
+          doc-folder: thesis-doc-test-1
+          vector-table-name: ${{ steps.vars.outputs.table }}
+          clear: 'true'
+          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+          wif-provider: ${{ secrets.WIF_PROVIDER }}
+          wif-service-account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+          db-instance: ${{ secrets.DB_INSTANCE }}
+          db-name: ${{ secrets.DB_NAME }}
+          db-user: ${{ secrets.DB_USER }}
+          db-password: ${{ secrets.DB_PASSWORD }}
+
+      - name: Indexar minisitio hermano (estado actual) en la misma tabla réplica
+        uses: ./microservice/indexer
+        with:
+          docs-path: ${{ github.workspace }}/sibling/docs
+          doc-folder: thesis-doc-test-2
+          vector-table-name: ${{ steps.vars.outputs.table }}
+          clear: 'true'
+          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+          wif-provider: ${{ secrets.WIF_PROVIDER }}
+          wif-service-account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+          db-instance: ${{ secrets.DB_INSTANCE }}
+          db-name: ${{ secrets.DB_NAME }}
+          db-user: ${{ secrets.DB_USER }}
+          db-password: ${{ secrets.DB_PASSWORD }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build microservicio
+        working-directory: microservice
+        run: pnpm install --frozen-lockfile && pnpm build
+
+      - name: Levantar microservicio contra la tabla réplica
+        working-directory: microservice
+        env:
+          PORT: '3000'
+          DB_HOST: 127.0.0.1
+          DB_PORT: '5432'
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          VECTOR_TABLE_NAME: ${{ steps.vars.outputs.table }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          # El Cloud SQL Proxy quedó corriendo en background desde los pasos de indexación.
+          nohup node dist/main.js > microservice.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/chat/health > /dev/null; then
+              echo "Microservicio arriba."
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Evaluar contra ground truth y comparar con baseline
+        working-directory: microservice
+        env:
+          MICROSERVICE_URL: http://localhost:3000
+        run: |
+          npx ts-node --transpile-only eval/run-eval.ts
+          npx ts-node --transpile-only eval/compare-baseline.ts
+
+      - name: Limpieza — borrar tabla réplica
+        if: always()
+        env:
+          PGPASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: |
+          sudo apt-get install -y postgresql-client > /dev/null 2>&1 || true
+          psql -h 127.0.0.1 -U "${{ secrets.DB_USER }}" -d "${{ secrets.DB_NAME }}" \
+            -c "DROP TABLE IF EXISTS ${{ steps.vars.outputs.table }};" || true
