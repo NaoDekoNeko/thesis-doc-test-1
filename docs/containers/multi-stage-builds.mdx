@@ -5,7 +5,9 @@ category: containers
 
 # Multi-stage Builds
 
-Los builds multi-stage permiten usar una imagen pesada para compilar y una imagen mínima para ejecutar, reduciendo drásticamente el tamaño final.
+## ¿Qué problema resuelve?
+
+Cuando se compila una aplicación dentro de un contenedor, la imagen final termina arrastrando herramientas de compilación, dependencias de desarrollo y artefactos intermedios que la aplicación nunca necesita en tiempo de ejecución. El patrón de **build multi-etapa** (multi-stage build) separa el proceso en dos imágenes distintas dentro del mismo Dockerfile: una imagen "pesada" que incluye todo lo necesario para compilar, y una imagen final mínima que solo contiene el artefacto ya compilado y sus dependencias de producción. El resultado es una imagen final significativamente más liviana, sin sacrificar nada del proceso de compilación.
 
 ## Patrón base/builder/runner
 
@@ -42,7 +44,7 @@ CMD ["node", "dist/main"]
 
 `--mount=type=cache` monta un volumen de cache de BuildKit que persiste entre builds en el mismo runner. Esto evita re-descargar paquetes en cada ejecución del pipeline, acelerando el build significativamente.
 
-## Comparación de tamaños
+## Impacto en el tamaño de la imagen
 
 | Approach | Tamaño imagen |
 |---|---|
