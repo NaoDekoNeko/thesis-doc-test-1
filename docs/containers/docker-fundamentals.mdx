@@ -5,4 +5,59 @@ category: containers
 
 # Fundamentos de Docker
 
-Página en revisión.
+Docker permite empaquetar una aplicación y todas sus dependencias en una **imagen** que se ejecuta de forma idéntica en cualquier entorno.
+
+## Conceptos esenciales
+
+| Concepto | Descripción |
+|---|---|
+| **Imagen** | Plantilla inmutable con el sistema de archivos de la app |
+| **Contenedor** | Instancia en ejecución de una imagen |
+| **Dockerfile** | Receta para construir una imagen |
+| **Registry** | Repositorio de imágenes (Artifact Registry, Docker Hub) |
+| **Layer** | Capa del sistema de archivos, cacheada entre builds |
+
+## Anatomía de un Dockerfile
+
+```dockerfile
+# Imagen base
+FROM node:24-alpine AS base
+
+# Variables de entorno
+ENV NODE_ENV=production
+
+# Directorio de trabajo
+WORKDIR /app
+
+# Copiar dependencias primero (mejor cache)
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+# Copiar código fuente
+COPY src ./src
+
+# Comando de inicio
+CMD ["node", "dist/main"]
+```
+
+## Caching de capas
+
+Docker cachea cada capa. Si una capa no cambia, se reutiliza en el siguiente build. Por esto se copia `package.json` antes que el código fuente: las dependencias cambian menos seguido que el código.
+
+```dockerfile
+# ✅ Correcto: dependencias antes que código
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install
+COPY src ./src
+
+# ❌ Incorrecto: invalida el cache de dependencias en cada cambio de código
+COPY . .
+RUN pnpm install
+```
+
+## Buenas prácticas de seguridad
+
+- Usar imágenes `alpine` o `distroless` para reducir la superficie de ataque.
+- No correr el proceso principal como `root`.
+- Nunca incluir secretos en la imagen; pasarlos vía variables de entorno en tiempo de ejecución.
+- Escanear imágenes con `docker scout` o Artifact Registry's vulnerability scanning.

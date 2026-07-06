@@ -5,4 +5,51 @@ category: containers
 
 # Multi-stage Builds
 
-Página en revisión.
+Los builds multi-stage permiten usar una imagen pesada para compilar y una imagen mínima para ejecutar, reduciendo drásticamente el tamaño final.
+
+## Patrón base/builder/runner
+
+```dockerfile
+# Stage 1: base compartido
+FROM node:24-alpine AS base
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable && corepack prepare pnpm@9 --activate
+
+# Stage 2: compilación
+FROM base AS builder
+WORKDIR /app
+COPY package.json pnpm-lock.yaml ./
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile
+COPY tsconfig*.json nest-cli.json ./
+COPY src ./src
+RUN pnpm run build
+
+# Stage 3: runtime mínimo
+FROM base AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+COPY package.json pnpm-lock.yaml ./
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile --prod
+COPY --from=builder /app/dist ./dist
+EXPOSE 3000
+CMD ["node", "dist/main"]
+```
+
+## Cache mount de pnpm
+
+`--mount=type=cache` monta un volumen de cache de BuildKit que persiste entre builds en el mismo runner. Esto evita re-descargar paquetes en cada ejecución del pipeline, acelerando el build significativamente.
+
+## Comparación de tamaños
+
+| Approach | Tamaño imagen |
+|---|---|
+| Single stage con devDeps | ~800 MB |
+| Multi-stage sin cache mount | ~180 MB |
+| Multi-stage con pnpm prune | ~120 MB |
+
+## Relación con el pipeline
+
+El microservicio RAG (`thesis-rag-microservice`) usa exactamente este patrón. El pipeline en GitHub Actions construye la imagen con `docker build` y la sube a **Artifact Registry** en GCP, desde donde Cloud Run la descarga para ejecutarla.
