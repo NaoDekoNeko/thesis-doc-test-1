@@ -28,7 +28,7 @@ const areas = [
     emoji: '📊',
     title: 'Observability',
     desc: 'Logging estructurado, métricas y estrategias de monitoreo de servicios.',
-    to: '/docs/observability/monitoring',
+    to: '/docs/observability/logging',
   },
 ];
 

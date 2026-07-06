@@ -90,7 +90,7 @@ const config: Config = {
             { label: 'CI/CD', to: '/docs/cicd/github-actions' },
             { label: 'Containers', to: '/docs/containers/docker-fundamentals' },
             { label: 'IaC', to: '/docs/iac/terraform-basics' },
-            { label: 'Observability', to: '/docs/observability/monitoring' },
+            { label: 'Observability', to: '/docs/observability/logging' },
           ],
         },
         {
