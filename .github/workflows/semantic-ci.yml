@@ -48,6 +48,12 @@ jobs:
       DB_USER: postgres
       DB_PASSWORD: postgres
     steps:
+      - name: Checkout master (estado base, previo al PR)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: self-base
+
       - name: Checkout PR (minisitio propio)
         uses: actions/checkout@v4
         with:
@@ -77,12 +83,20 @@ jobs:
           python-version: '3.12'
       - run: pip install -r microservice/indexer/requirements.txt
 
-      - name: Indexar minisitio propio (PR)
+      - name: Indexar minisitio propio — estado base (master, previo al PR)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DOC_FOLDER: thesis-doc-test-1
+          DOCS_PATH: ${{ github.workspace }}/self-base/docs
+          CLEAR: 'true'
+        run: python microservice/indexer/document_processor.py
+
+      - name: Indexar minisitio propio — cambios del PR (incremental)
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           DOC_FOLDER: thesis-doc-test-1
           DOCS_PATH: ${{ github.workspace }}/self/docs
-          CLEAR: 'true'
+          CLEAR: 'false'
         run: python microservice/indexer/document_processor.py
 
       - name: Indexar minisitio hermano (estado actual)
