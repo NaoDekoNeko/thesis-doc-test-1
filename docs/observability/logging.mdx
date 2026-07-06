@@ -7,25 +7,6 @@ category: observability
 
 El logging estructurado emite logs como objetos JSON en lugar de texto plano, lo que permite filtrarlos y analizarlos programáticamente en Cloud Logging.
 
-## Formato en NestJS
-
-El microservicio RAG usa el `Logger` de NestJS, que en producción emite JSON compatible con Cloud Logging:
-
-```typescript
-import { Logger } from '@nestjs/common';
-
-@Injectable()
-export class SearchService {
-  private readonly logger = new Logger(SearchService.name);
-
-  async hybridSearch(query: string) {
-    this.logger.log(`Búsqueda iniciada: "${query}"`);
-    // ...
-    this.logger.error('Embedding generation failed', err.stack);
-  }
-}
-```
-
 ## Niveles de log
 
 | Nivel | Uso |
