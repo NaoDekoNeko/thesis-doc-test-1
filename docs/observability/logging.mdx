@@ -50,7 +50,3 @@ jsonPayload.message=~"totalMs"
 ## Relación con métricas
 
 Los logs son la fuente primaria de observabilidad para la PoC. En una arquitectura de producción se complementarían con métricas de Cloud Monitoring y trazas distribuidas con Cloud Trace.
-
-## Retención de logs
-
-Cloud Logging conserva los logs de aplicación durante 30 días por defecto en el bucket `_Default`. Para retención más larga se puede configurar un sink hacia un bucket de Cloud Storage o hacia BigQuery, útil si se necesita auditoría histórica más allá de la ventana por defecto.
