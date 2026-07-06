@@ -64,3 +64,7 @@ Esta separación refleja el principio de **desacoplamiento** documentado en el p
 | `GCS_BUCKET` | Bucket destino del deploy | Repos de docs |
 | `GEMINI_API_KEY` | Indexación RAG | Repos de docs |
 | `DB_*` | Conexión a PostgreSQL | Repos de docs |
+
+## Estrategia de rollback
+
+Si un deploy introduce un problema, el rollback en Cloud Run se hace apuntando el tráfico a la revisión anterior (`gcloud run services update-traffic`), sin necesidad de rebuild. Para los minisites estáticos en GCS, el rollback consiste en volver a ejecutar el pipeline sobre el commit anterior, ya que no hay estado mutable entre despliegues.
