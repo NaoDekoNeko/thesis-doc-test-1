@@ -97,6 +97,7 @@ jobs:
           DOC_FOLDER: thesis-doc-test-1
           DOCS_PATH: ${{ github.workspace }}/self/docs
           CLEAR: 'false'
+          SYNC_REPORT_FILE: ${{ github.workspace }}/microservice/eval/chunk-sync-report.md
         run: python microservice/indexer/document_processor.py
 
       - name: Indexar minisitio hermano (estado actual)
@@ -151,6 +152,25 @@ jobs:
         working-directory: microservice
         continue-on-error: true
         run: npx ts-node --transpile-only eval/compare-baseline.ts
+
+      - name: Agregar evidencia de indexación incremental al comentario
+        if: always()
+        working-directory: microservice
+        run: |
+          {
+            echo ""
+            echo "## 🧬 Evidencia de indexación incremental (hash por chunk)"
+            echo ""
+            echo "Chunks afectados al indexar los cambios del PR sobre el estado base (master). Los chunks sin cambios no se listan (quedaron con el mismo hash y no se reprocesaron)."
+            echo ""
+            if [ -f eval/chunk-sync-report.md ]; then
+              cat eval/chunk-sync-report.md
+            else
+              echo "_(reporte no disponible — el paso de indexación incremental no llegó a ejecutarse)_"
+            fi
+            echo ""
+            echo "<sub>Generado por \`document_processor.py\` al comparar el estado base indexado contra los cambios del PR.</sub>"
+          } >> eval/pr-comment.md
 
       - name: Publicar resultado como comentario del PR
         if: always()
